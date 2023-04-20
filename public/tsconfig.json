@@ -1,0 +1,18 @@
+{
+  "extends": "../tsconfig.rules.json",
+  "compilerOptions": {
+    /* Language and Environment */
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+
+    /* Modules */
+    "rootDir": "./src",
+    "moduleResolution": "nodenext",
+
+    /* Emit */
+    "outDir": "./js",
+    "tsBuildInfoFile": "./js/tsconfig.tsbuildinfo",
+  }
+}

@@ -1,0 +1,161 @@
+:root {
+    --main-color-h: 258;
+    --main-color-s: 58%;
+    --main-color-l: 56%;
+
+    --main-color: hsl(var(--main-color-h), var(--main-color-s), var(--main-color-l));
+    --main-color-light: hsl(var(--main-color-h), var(--main-color-s), calc(var(--main-color-s) + 10%));
+    --main-color-dark: hsl(var(--main-color-h), var(--main-color-s), calc(var(--main-color-s) - 20%));
+    --main-color-darker: hsl(var(--main-color-h), var(--main-color-s), calc(var(--main-color-s) - 50%));
+
+    --toolbar-text-color: white;
+}
+
+/* Initial styles */
+
+html {
+    min-height: -webkit-fill-available;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    min-height: -webkit-fill-available;
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+}
+
+.wrapper {
+    height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+}
+
+textarea:focus, input:focus {
+    outline: none;
+}
+
+/* Toolbar */
+
+.toolbar {
+    height: 25px;
+    padding: 5px;
+    background-color: var(--main-color);
+    display: flex;
+}
+.toolbar > :not(:last-child) {
+    margin-right: 5px;
+}
+
+.toolbar-interactive {
+    border: none;
+    border-radius: 5px;
+}
+
+.toolbar-navigation:not([hidden]) {
+    display: contents;
+}
+
+.toolbar-button {
+    aspect-ratio: 1 / 1;
+    background: none;
+    color: lightgray;
+    padding: 0;
+}
+.toolbar-button svg {
+    margin: auto;
+    vertical-align: sub;
+}
+.toolbar-button:hover {
+    background-color: hsla(0, 0%, 100%, 0.15);
+}
+.toolbar-button:active {
+    background-color: hsla(0, 0%, 0%, 0.15);
+}
+
+@keyframes address-bar-load-0-10 {
+    0% {
+        background-position: 100%;
+    }
+    100% {
+        background-position: 90%;
+    }
+}
+@keyframes address-bar-load-10-70 {
+    0% {
+        background-position: 90%;
+    }
+    100% {
+        background-position: 30%;
+    }
+}
+@keyframes address-bar-load-70-100 {
+    0% {
+        background-position: 30%;
+    }
+    90% {
+        animation-timing-function: steps(1, end);
+        background-position: 0%;
+    }
+    100% {
+        animation-timing-function: step-start;
+        background-position: 100%;
+    }
+}
+@keyframes address-bar-load-10-100 {
+    0% {
+        background-position: 90%;
+    }
+    90% {
+        animation-timing-function: steps(1, end);
+        background-position: 0%;
+    }
+    100% {
+        background-position: 100%;
+    }
+}
+
+.address-bar {
+    flex: 1;
+    padding: 0 5px;
+    caret-color: var(--toolbar-text-color);
+    color: var(--toolbar-text-color);
+    
+    background-image: linear-gradient(to right, var(--main-color-light) 50%, var(--main-color-dark) 50%);
+    background-size: 200% 100%;
+    background-position: 100%;
+    animation-fill-mode: forwards;
+    animation-duration: 0.5s;
+}
+.address-bar::placeholder {
+    color: var(--main-color);
+}
+.address-bar.progress-0-10 {
+    animation-name: address-bar-load-0-10;
+}
+.address-bar.progress-10-70 {
+    animation-name: address-bar-load-10-70;
+}
+.address-bar.progress-70-100 {
+    animation-name: address-bar-load-70-100;
+}
+.address-bar.progress-10-100 {
+    animation-name: address-bar-load-10-100;
+}
+
+.toolbar-text {
+    margin: auto;
+    color: var(--toolbar-text-color)
+}
+
+/* Main content */
+
+.content-frame {
+    border: none;
+}
+
+.content-frame-idle {
+    background-color: var(--main-color-darker);
+}

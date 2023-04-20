@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.rules.json",
+  "compilerOptions": {
+    /* Language and Environment */
+    "lib": [
+      "ESNext"
+    ],
+
+    /* Modules */
+    "rootDir": "./src",
+    "moduleResolution": "node",
+
+    /* Emit */
+    "outDir": "./build",
+    "tsBuildInfoFile": "./build/tsconfig.tsbuildinfo",
+  },
+  "include": ["./src/**/*"],
+  "references": [
+    { "path": "./public/tsconfig.json" }
+  ],
+}

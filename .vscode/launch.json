@@ -1,0 +1,28 @@
+{
+    // Используйте IntelliSense, чтобы узнать о возможных атрибутах.
+    // Наведите указатель мыши, чтобы просмотреть описания существующих атрибутов.
+    // Для получения дополнительной информации посетите: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Server",
+            "request": "launch",
+            "runtimeArgs": [
+                "start"
+            ],
+            "runtimeExecutable": "npm",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "type": "node",
+            "console": "integratedTerminal",
+            "serverReadyAction": {
+              "pattern": "Server is started at port ([0-9]+)",
+              "uriFormat": "http://localhost:%s",
+              "action": "debugWithChrome",
+              "webRoot": "${workspaceFolder}/public",
+              "killOnServerStop": true,
+            }
+        }
+    ]
+}
