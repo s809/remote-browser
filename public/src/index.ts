@@ -1,66 +1,91 @@
-import { ServerConnection } from "./ServerConnection.js";
+import { EventType, RemoteBrowserEvents, ServerConnection } from "./ServerConnection.js";
 import { AppContext } from "./AppContext.js";
 import { config } from "./config.js";
 
-var connection: ServerConnection | null = null;
+new class Main {
+    static instance: Main;
 
-const addressBarEl = AppContext.AddressBar.element;
-addressBarEl.addEventListener("keydown", e => {
-    if (e.key === "Enter")
-        navigate();
-});
+    connection: ServerConnection | null = null;
+    addressBarEl = AppContext.AddressBar.element;
+    lastNavigateUrl: string | null = null;
 
-var lastNavigateUrl: string | null;
-async function navigate() {
-    if (!addressBarEl.value.trim().length) return;
+    eventMap: {
+        [K in keyof RemoteBrowserEvents]: [K, RemoteBrowserEvents[K]]
+    }[keyof RemoteBrowserEvents][] = [
+        [EventType.PageCreated, this.onPageCreated]
+    ];
 
-    AppContext.AddressBar.progress = 10;
-    history.replaceState(null, "", `#${addressBarEl.value}`);
+    resizeObserver = new ResizeObserver(entries => {
+        const { width, height } = entries[0]?.contentRect!;
+        this.connection?.updateClientDimensions(width, height);
+    });
 
-    if (lastNavigateUrl) {
-        lastNavigateUrl = addressBarEl.value;
-        return;
-    } else {
-        lastNavigateUrl = addressBarEl.value;
-    }
+    constructor() {
+        Main.instance = this;
 
-    try {
-        if (!connection) {
-            addressBarEl.disabled = true;
-            connection = await ServerConnection.create(config.wsUrl);
-            setupEvents();
+        this.addressBarEl.addEventListener("keydown", e => {
+            if (e.key === "Enter")
+                this.navigate();
+        });
+
+        if (window.location.hash.length) {
+            this.addressBarEl.value = decodeURI(window.location.hash.slice(1));
+            this.navigate();
         }
-    } catch (e) {
-        showFatalError("Failed to connect!");
-        return;
-    } finally {
-        addressBarEl.disabled = false;
     }
 
-    connection.sendEvent("navigate", addressBarEl.value);
-}
+    async navigate() {
+        if (!this.addressBarEl.value.trim().length) return;
 
-function showFatalError(message: string) {
-    connection = null;
-    lastNavigateUrl = null;
-    alert(message);
-    AppContext.AddressBar.progress = 100;
-    AppContext.displaying = false;
-}
+        AppContext.AddressBar.progress = 10;
+        history.replaceState(null, "", `#${this.addressBarEl.value}`);
 
-async function setupEvents() {
-    connection?.addEventListener("close", ({ reason }) => showFatalError(reason.length ? reason : "Disconnected!"));
+        if (this.lastNavigateUrl) {
+            this.lastNavigateUrl = this.addressBarEl.value;
+            return;
+        } else {
+            this.lastNavigateUrl = this.addressBarEl.value;
+        }
 
-    connection?.eventReceiver.addEventListener("page_created", () => {
+        try {
+            if (!this.connection) {
+                this.addressBarEl.disabled = true;
+                this.connection = await ServerConnection.create(config.wsUrl);
+                this.setupEvents();
+            }
+        } catch (e) {
+            this.showFatalError("Failed to connect!");
+            return;
+        } finally {
+            this.addressBarEl.disabled = false;
+        }
+
+        this.connection.navigate(this.addressBarEl.value);
+    }
+
+    showFatalError(message: string) {
+        this.connection = null;
+        this.lastNavigateUrl = null;
+        this.resizeObserver.unobserve(AppContext.ContentFrame.element);
+
+        alert(message);
+        AppContext.AddressBar.progress = 100;
+        AppContext.displaying = false;
+    }
+
+    async setupEvents() {
+        this.connection?.addEventListener("close", ({ reason }) => this.showFatalError(reason.length ? reason : "Disconnected!"));
+
+        for (const item of this.eventMap)
+            this.connection?.eventReceiver.addEventListener(item[0], (ev: Event) => (item[1] as Function).apply(this, (ev as CustomEvent).detail));
+    }
+
+    onPageCreated() {
         AppContext.displaying = true;
-    });
 
-    connection?.eventReceiver.addEventListener("", () => {
-
-    });
-}
-
-if (window.location.hash.length) {
-    addressBarEl.value = decodeURI(window.location.hash.slice(1));
-    navigate();
-}
+        const contentFrameSize = AppContext.ContentFrame.dimensions;
+        this.connection?.updateClientDimensions(contentFrameSize.width, contentFrameSize.height);
+        
+        this.resizeObserver.observe(AppContext.ContentFrame.element);
+    }
+};

@@ -1,16 +1,15 @@
 import express from "express";
-import { tinyws } from "tinyws";
 import WebSocket from "ws";
 import { BrowserClient } from "./BrowserClient";
+import expressWs from "@wll8/express-ws";
 import "source-map-support/register";
 
 const port = 3000;
 
-const app = express();
+const app = expressWs(express()).app;
 app.use(express.static("./public"));
 
-app.use("/ws", tinyws(), async req => {
-    const ws = await req.ws();
+app.ws("/ws", async ws => {
     await BrowserClient.create(ws);
 });
 

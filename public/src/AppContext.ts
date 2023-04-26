@@ -4,24 +4,21 @@ const progressValues = [0, 10, 70, 100];
 export const AppContext = new class AppContext {
     #navbar = document.querySelector(".toolbar-navigation") as HTMLDivElement;
 
-    #contentFrame = document.querySelector(".content-frame") as HTMLIFrameElement;
-    
     #displaying = false;
     get displaying() {
         return this.#displaying;
     }
-  
+
     set displaying(value: boolean) {
         if (this.#displaying === value) return;
         this.#displaying = value;
 
         if (value) {
             this.#navbar.hidden = false;
-            this.#contentFrame.classList.remove("content-frame-idle");
+            this.ContentFrame.idle = false;
         } else {
             this.#navbar.hidden = true;
-            this.#contentFrame.src = "about:blank";
-            this.#contentFrame.classList.add("content-frame-idle");
+            this.ContentFrame.idle = true;
         }
     }
 
@@ -50,6 +47,27 @@ export const AppContext = new class AppContext {
             this.#element.classList.add(this.#progressClassName);
 
             this.#progress = value;
+        }
+    }
+
+    ContentFrame = new class ContentFrame {
+        #element = document.querySelector(".content-frame") as HTMLIFrameElement;
+        get element() {
+            return this.#element;
+        }
+        
+        set idle(value: boolean) {
+            if (value)
+                this.#element.classList.add("content-frame-idle");
+            else
+                this.#element.classList.remove("content-frame-idle");
+        }
+
+        get dimensions() {
+            return {
+                width: this.#element.offsetWidth,
+                height: this.#element.offsetHeight
+            }
         }
     }
 }

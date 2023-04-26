@@ -1,12 +1,14 @@
 import Joi from "joi";
 import puppeteer, { Browser, Page } from "puppeteer";
 import { RawData, WebSocket } from "ws";
+import { EventType, RemoteBrowserEvents } from "../public/src/ServerConnection";
 
 const JoiCustom = Joi.defaults(schema => schema.required());
 const urlRegex = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
 
 export class BrowserClient {
     private destroyed = false;
+    private pagePrepared = false;
 
     private static browser?: Browser;
     private static clients = new Set<BrowserClient>();
@@ -20,6 +22,10 @@ export class BrowserClient {
         ["navigate", {
             schema: [JoiCustom.string()],
             handler: this.navigate
+        }],
+        ["set_client_dimensions", {
+            schema: [JoiCustom.number(), JoiCustom.number()],
+            handler: this.setClientDimensions
         }]
     ].map((pair: any) => {
         pair[1].schema = JoiCustom.array().ordered(...pair[1].schema);
@@ -40,7 +46,7 @@ export class BrowserClient {
         // ASYNC STARTS HERE
 
         if (!BrowserClient.browser)
-            BrowserClient.browser = await puppeteer.launch({ headless: false });
+            BrowserClient.browser = await puppeteer.launch({ headless: false, devtools: true });
         
         const page = await BrowserClient.browser.newPage();
 
@@ -57,8 +63,8 @@ export class BrowserClient {
         ws.on("message", data => this.handleEvent(data.toString()));
         for (const message of messages)
             ws.emit("message", message);
-
-        this.sendEvent("page_created");
+        
+        this.sendEvent(EventType.PageCreated);
     }
 
     private ping() {
@@ -70,7 +76,7 @@ export class BrowserClient {
         this.ws.once("pong", () => this.pingPending = false);
     }
 
-    sendEvent(type: string, ...data: any[]) {
+    sendEvent<EventName extends keyof RemoteBrowserEvents>(type: EventName, ...data: Parameters<RemoteBrowserEvents[EventName]>): void {
         this.ws.send(JSON.stringify({
             type,
             data
@@ -85,7 +91,7 @@ export class BrowserClient {
             const type = packet.type as string;
             const packetTypeData = this.packetTypeToHandler.get(type);
             if (!packetTypeData)
-                throw new Error("Invalid packet type");
+                throw new Error(`Invalid packet type: ${type}`);
             
             JoiCustom.assert(packet.data, packetTypeData.schema);
             await packetTypeData.handler(...packet.data);
@@ -94,18 +100,11 @@ export class BrowserClient {
         }
     }
 
-    async navigate(url: string) {
-        if (!url.match(urlRegex))
-            url = `https://google.com/search?q=${encodeURIComponent(url)}`;
-            
-        await this.page.goto(url);
-    }
-
     async destroy(message?: string) {
         if (this.destroyed)
             return;
         this.destroyed = true;
-        
+
         clearInterval(this.pingInterval);
         if (message)
             this.ws.close(1001, message);
@@ -118,5 +117,96 @@ export class BrowserClient {
             await BrowserClient.browser?.close().catch(() => { });
             delete BrowserClient.browser;
         }
+    }
+
+    async navigate(url: string) {
+        if (!url.match(urlRegex))
+            url = `https://google.com/search?q=${encodeURIComponent(url)}`;
+            
+        if (!this.pagePrepared) {
+            this.pagePrepared = true;
+
+            await this.page.exposeFunction("_remoteBrowser_log", (...args: string[]) => console.log("Remote browser:", ...args));
+            await this.page.exposeFunction("_remoteBrowser_createElement", (parentId: number, leftSiblingId: number, id: number, type: string, attributes: Record<string, string>) => this.sendEvent(EventType.CreateElement, parentId, leftSiblingId, id, type, attributes));
+            await this.page.exposeFunction("_remoteBrowser_createTextNode", (parentId: number, leftSiblingId: number, id: number, value: string) => this.sendEvent(EventType.CreateTextNode, parentId, leftSiblingId, id, value));
+            await this.page.exposeFunction("_remoteBrowser_updateElement", (id: number, attrKey: string, value: string) => this.sendEvent(EventType.UpdateElement, id, attrKey, value));
+            await this.page.exposeFunction("_remoteBrowser_removeElement", (id: number) => this.sendEvent(EventType.RemoveElement, id));
+
+            await this.page.evaluateOnNewDocument(`
+                const idSymbol = Symbol("_remoteBrowser_id");
+                var nextId = 0;
+
+                const mutationObserver = new MutationObserver(mutations => {
+                    for (const mutation of mutations) {
+                        switch (mutation.type) {
+                            case "childList":
+                                addNodes:
+                                for (const node of mutation.addedNodes) {
+                                    if (!(idSymbol in mutation.target || node.tagName === "HTML")) continue;
+                                    const prevSiblingId = mutation.previousSibling?.[idSymbol];
+
+                                    switch (node.nodeType) {
+                                        case Node.ELEMENT_NODE:
+                                            if (node.tagName === "SCRIPT")
+                                                continue addNodes;
+                                            _remoteBrowser_createElement(mutation.target?.[idSymbol], prevSiblingId, nextId, node.tagName, Object.fromEntries([...node.attributes].filter(x => !x.name.startsWith("on")).map(x => [x.name, x.nodeValue])));
+                                            break;
+                                        case Node.TEXT_NODE:
+                                            _remoteBrowser_createTextNode(mutation.target[idSymbol], prevSiblingId, nextId, node.nodeValue);
+                                            break;
+                                        default:
+                                            continue addNodes;
+                                    }
+
+                                    node[idSymbol] = nextId++;
+                                }
+
+                                for (const node of mutation.removedNodes) {
+                                    if (node[idSymbol])
+                                        _remoteBrowser_removeElement(node[idSymbol]);
+                                }
+
+                                break;
+                            case "attributes":
+                                if (mutation.target[idSymbol])
+                                    _remoteBrowser_updateElement(mutation.target[idSymbol], mutation.attributeName, mutation.target.getAttribute(mutation.attributeName));
+                                break;
+                        }
+                    }
+                });
+
+                mutationObserver.observe(document, {
+                    attributes: true,
+                    childList: true,
+                    subtree: true
+                });
+            `);
+            await this.page.evaluateOnNewDocument(`
+                var _interfaces = Object.getOwnPropertyNames(window).filter(function(i) {
+                    return /^HTML/.test(i);
+                }).map(function(i) {
+                    return window[i];
+                });
+
+                for (var i = 0; i < _interfaces.length; i++) {
+                    (function(original) {
+                        _interfaces[i].prototype.addEventListener = function(type, listener, useCapture) {
+                            _remoteBrowser_log("addEventListener " + type, listener, useCapture);
+
+                            return original.apply(this, arguments);
+                        }
+                    })(_interfaces[i].prototype.addEventListener);
+                }
+            `);
+        }
+        
+        await this.page.goto(url);
+    }
+
+    async setClientDimensions(width: number, height: number) {
+        await this.page.setViewport({
+            width,
+            height
+        });
     }
 }
