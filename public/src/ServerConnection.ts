@@ -3,7 +3,7 @@ interface ServerConnectionEventMap {
     "": Event;
 }
 
-export const enum EventType {
+export const enum RemoteBrowserEventType {
     PageCreated = "page_created",
     CreateElement = "create_element",
     CreateTextNode = "create_text_node",
@@ -15,16 +15,18 @@ export const enum EventType {
     SetElementScroll = "set_element_scroll"
 }
 
-export interface RemoteBrowserEvents {
-    [EventType.PageCreated]: () => void;
-    [EventType.CreateElement]: (parentId: number, leftSiblingId: number, id: number, type: string, attributes: Record<string, string>) => void;
-    [EventType.CreateTextNode]: (parentId: number, leftSiblingId: number, id: number, value: string) => void;
-    [EventType.UpdateElement]: (id: number, attrKey: string, value: string) => void;
-    [EventType.RemoveElement]: (id: number) => void;
+type CreateElementCommon<Ext extends (...args: any) => void> = (parentId: number, leftSiblingId: number, id: number, ...args: Parameters<Ext>) => void;
 
-    [EventType.Navigate]: (value: string) => void;
-    [EventType.SetClientDimensions]: (width: number, height: number) => void;
-    [EventType.SetElementScroll]: (id: number, x: number, y: number) => void;
+export interface RemoteBrowserEvents {
+    [RemoteBrowserEventType.PageCreated]: () => void;
+    [RemoteBrowserEventType.CreateElement]: CreateElementCommon<(type: string, attributes: Record<string, string>) => void>;
+    [RemoteBrowserEventType.CreateTextNode]: CreateElementCommon<(value: string) => void>;
+    [RemoteBrowserEventType.UpdateElement]: (id: number, attrKey: string, value: string) => void;
+    [RemoteBrowserEventType.RemoveElement]: (id: number) => void;
+
+    [RemoteBrowserEventType.Navigate]: (value: string) => void;
+    [RemoteBrowserEventType.SetClientDimensions]: (width: number, height: number) => void;
+    [RemoteBrowserEventType.SetElementScroll]: (id: number, x: number, y: number) => void;
 }
 
 export class ServerConnection extends EventTarget {
@@ -65,15 +67,15 @@ export class ServerConnection extends EventTarget {
     }
 
     navigate(value: string) {
-        this.sendEvent(EventType.Navigate, value);
+        this.sendEvent(RemoteBrowserEventType.Navigate, value);
     }
 
     updateClientDimensions(width: number, height: number) {
-        this.sendEvent(EventType.SetClientDimensions, width, height);
+        this.sendEvent(RemoteBrowserEventType.SetClientDimensions, width, height);
     }
 
     updateClientScroll(el: HTMLElement) {
         const { x, y } = el.getBoundingClientRect();
-        this.sendEvent(EventType.SetElementScroll, parseInt(el.dataset["id"]!), x, y);
+        this.sendEvent(RemoteBrowserEventType.SetElementScroll, parseInt(el.dataset["id"]!), x, y);
     }
 }

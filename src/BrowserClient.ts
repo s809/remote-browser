@@ -1,7 +1,7 @@
 import Joi from "joi";
 import puppeteer, { Browser, Page } from "puppeteer";
 import { RawData, WebSocket } from "ws";
-import { EventType, RemoteBrowserEvents } from "../public/src/ServerConnection";
+import { RemoteBrowserEventType, RemoteBrowserEvents } from "../public/src/ServerConnection";
 
 const JoiCustom = Joi.defaults(schema => schema.required());
 const urlRegex = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
@@ -64,7 +64,7 @@ export class BrowserClient {
         for (const message of messages)
             ws.emit("message", message);
         
-        this.sendEvent(EventType.PageCreated);
+        this.sendEvent(RemoteBrowserEventType.PageCreated);
     }
 
     private ping() {
@@ -127,10 +127,10 @@ export class BrowserClient {
             this.pagePrepared = true;
 
             await this.page.exposeFunction("_remoteBrowser_log", (...args: string[]) => console.log("Remote browser:", ...args));
-            await this.page.exposeFunction("_remoteBrowser_createElement", (parentId: number, leftSiblingId: number, id: number, type: string, attributes: Record<string, string>) => this.sendEvent(EventType.CreateElement, parentId, leftSiblingId, id, type, attributes));
-            await this.page.exposeFunction("_remoteBrowser_createTextNode", (parentId: number, leftSiblingId: number, id: number, value: string) => this.sendEvent(EventType.CreateTextNode, parentId, leftSiblingId, id, value));
-            await this.page.exposeFunction("_remoteBrowser_updateElement", (id: number, attrKey: string, value: string) => this.sendEvent(EventType.UpdateElement, id, attrKey, value));
-            await this.page.exposeFunction("_remoteBrowser_removeElement", (id: number) => this.sendEvent(EventType.RemoveElement, id));
+            await this.page.exposeFunction("_remoteBrowser_createElement", (parentId: number, leftSiblingId: number, id: number, type: string, attributes: Record<string, string>) => this.sendEvent(RemoteBrowserEventType.CreateElement, parentId, leftSiblingId, id, type, attributes));
+            await this.page.exposeFunction("_remoteBrowser_createTextNode", (parentId: number, leftSiblingId: number, id: number, value: string) => this.sendEvent(RemoteBrowserEventType.CreateTextNode, parentId, leftSiblingId, id, value));
+            await this.page.exposeFunction("_remoteBrowser_updateElement", (id: number, attrKey: string, value: string) => this.sendEvent(RemoteBrowserEventType.UpdateElement, id, attrKey, value));
+            await this.page.exposeFunction("_remoteBrowser_removeElement", (id: number) => this.sendEvent(RemoteBrowserEventType.RemoveElement, id));
 
             await this.page.evaluateOnNewDocument(`
                 const idSymbol = Symbol("_remoteBrowser_id");
