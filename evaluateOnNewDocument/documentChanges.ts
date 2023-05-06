@@ -1,8 +1,62 @@
 var nextId = 0;
 
+function setNodeId(node: Node) {
+    _remoteBrowser_nodes.set(nextId, node);
+    node[_remoteBrowser_idSymbol] = nextId;
+    return nextId++;
+}
+
+function createElement(parentId: number | null, prevSiblingId: number | null, element: HTMLElement) {
+    if (element instanceof HTMLScriptElement)
+        return null;
+    
+    const id = setNodeId(element);
+    _remoteBrowser_createElement(parentId, prevSiblingId, id, element.tagName, Object.fromEntries([...element.attributes].filter(x => !x.name.startsWith("on")).map(x => [x.name, x.nodeValue ?? ""])));
+
+    let lastChildId: number | null = null;
+    for (const child of element.childNodes)
+        lastChildId = createUnknownNode(id, lastChildId, child);
+
+    return id;
+}
+
+function createTextNode(parentId: number | null, prevSiblingId: number | null, node: Node) {
+    if (parentId === null)
+        return null;
+    
+    const id = setNodeId(node);
+    _remoteBrowser_createTextNode(parentId, prevSiblingId, id, node.nodeValue!);
+    return id;
+}
+
+function createUnknownNode(parentId: number | null, prevSiblingId: number | null, node: Node) {
+    if (_remoteBrowser_idSymbol in node) return null;
+
+    switch (node.nodeType) {
+        case Node.ELEMENT_NODE:
+            return createElement(parentId, prevSiblingId, node as HTMLElement);
+        case Node.TEXT_NODE:
+            return createTextNode(parentId, prevSiblingId, node);
+        default:
+            return null;
+    }
+}
+
+function removeNode(node: Node) {
+    const id = node[_remoteBrowser_idSymbol];
+    if (!id) return;
+
+    _remoteBrowser_removeElement(id);
+    _remoteBrowser_nodes.delete(id);
+    delete node[_remoteBrowser_idSymbol];
+
+    for (const child of node.childNodes)
+        removeNode(child);
+}
+
 const mutationObserver = new MutationObserver(mutations => {
     for (const mutation of mutations) {
-        const targetId = mutation.target[_remoteBrowser_idSymbol];
+        const targetId = mutation.target[_remoteBrowser_idSymbol] ?? null;
 
         switch (mutation.type) {
             case "childList":
@@ -11,38 +65,16 @@ const mutationObserver = new MutationObserver(mutations => {
                     if (targetId === undefined && !(node instanceof HTMLHtmlElement)) continue;
                     const prevSiblingId = mutation.previousSibling?.[_remoteBrowser_idSymbol] ?? null;
 
-                    switch (node.nodeType) {
-                        case Node.ELEMENT_NODE:
-                            if (node instanceof HTMLScriptElement)
-                                continue addNodes;
-                            const element = node as HTMLElement;
-                            _remoteBrowser_createElement(targetId ?? null, prevSiblingId, nextId, element.tagName, Object.fromEntries([...element.attributes].filter(x => !x.name.startsWith("on")).map(x => [x.name, x.nodeValue ?? ""])));
-                            break;
-                        case Node.TEXT_NODE:
-                            if (targetId === undefined)
-                                continue addNodes;
-                            _remoteBrowser_createTextNode(targetId, prevSiblingId, nextId, node.nodeValue!);
-                            break;
-                        default:
-                            continue addNodes;
-                    }
-
-                    _remoteBrowser_nodes.set(nextId, node);
-                    node[_remoteBrowser_idSymbol] = nextId++;
+                    createUnknownNode(targetId, prevSiblingId, node);
                 }
 
                 for (const node of mutation.removedNodes) {
-                    const id = node[_remoteBrowser_idSymbol];
-                    if (!id) continue;
-                    
-                    _remoteBrowser_removeElement(id);
-                    _remoteBrowser_nodes.delete(id);
-                    delete node[_remoteBrowser_idSymbol];
+                    removeNode(node);
                 }
 
                 break;
             case "attributes":
-                if (targetId === undefined) break;
+                if (targetId === null) break;
                 
                 switch (mutation.target.nodeType) {
                     case Node.ELEMENT_NODE:

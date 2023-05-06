@@ -16,6 +16,7 @@ new (class Main {
     lastNavigateUrl: string | null = null;
 
     eventMap: RemoteBrowserEventHandlerMap = [
+        [RemoteBrowserEventType.UrlChanged, this.onUrlChanged],
         [RemoteBrowserEventType.NewDocument, this.onNewDocument],
         [RemoteBrowserEventType.CreateElement, this.onCreateElement],
         [RemoteBrowserEventType.CreateTextNode, this.onCreateTextNode],
@@ -47,7 +48,6 @@ new (class Main {
         if (!this.addressBarEl.value.trim().length) return;
 
         AppContext.AddressBar.progress = 10;
-        history.replaceState(null, "", `#${this.addressBarEl.value}`);
 
         if (this.lastNavigateUrl) {
             this.lastNavigateUrl = this.addressBarEl.value;
@@ -93,6 +93,11 @@ new (class Main {
         this.remotePage = new RemotePage(this.connection!, AppContext.ContentFrame.element.contentWindow as any);
     }
 
+    onUrlChanged(url: string) {
+        this.addressBarEl.value = url;
+        history.replaceState(null, "", `#${url}`);
+    }
+
     onNewDocument() {
         if (!AppContext.displaying) {
             AppContext.displaying = true;
@@ -124,6 +129,11 @@ new (class Main {
                 break;
             case "BODY":
                 element = frameDocument.body;
+                element.appendChild(frameDocument.createElement("style")).textContent = `
+                    * {
+                        all: revert !important;
+                    }
+                `;
                 break;
             default:
                 element = this.elements.get(id) as HTMLElement ?? frameDocument.createElement(type);
