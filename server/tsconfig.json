@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "rootDir": ".",
+    "outDir": "../build/server",
+    "tsBuildInfoFile": "../build/server/tsconfig.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../common" },
+    { "path": "../evaluateOnNewDocument" }
+  ] 
+}

@@ -57,10 +57,12 @@ export const AppContext = new class AppContext {
         }
         
         set idle(value: boolean) {
-            if (value)
+            if (value) {
+                this.clear();
                 this.#element.classList.add("content-frame-idle");
-            else
+            } else {
                 this.#element.classList.remove("content-frame-idle");
+            }
         }
 
         get dimensions() {
@@ -68,6 +70,10 @@ export const AppContext = new class AppContext {
                 width: this.#element.offsetWidth,
                 height: this.#element.offsetHeight
             }
+        }
+
+        clear() {
+            this.#element.contentWindow?.location.reload();
         }
     }
 }

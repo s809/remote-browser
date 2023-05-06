@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "../build/evaluateOnNewDocument",
+    "tsBuildInfoFile": "../build/evaluateOnNewDocument/tsconfig.tsbuildinfo",
+    "inlineSources": true
+  }
+}

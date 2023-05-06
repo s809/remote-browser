@@ -1,18 +1,11 @@
 {
-  "extends": "../tsconfig.rules.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    /* Language and Environment */
-    "lib": [
-      "ESNext",
-      "DOM"
-    ],
-
-    /* Modules */
     "rootDir": "./src",
-    "moduleResolution": "nodenext",
-
-    /* Emit */
     "outDir": "./js",
-    "tsBuildInfoFile": "./js/tsconfig.tsbuildinfo",
-  }
+    "tsBuildInfoFile": "./js/tsconfig.tsbuildinfo"
+  },
+  "references": [
+    { "path": "../common" }
+  ]
 }

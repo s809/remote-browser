@@ -1,21 +1,55 @@
 {
-  "extends": "./tsconfig.rules.json",
   "compilerOptions": {
     /* Language and Environment */
     "lib": [
-      "ESNext"
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
     ],
+    "target": "ESNext",
 
     /* Modules */
-    "rootDir": "./src",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    
+    /* JavaScript Support */
+    "allowJs": false,
+
+    /* Modules */
+    "rootDir": ".",
+    "moduleResolution": "nodenext",
 
     /* Emit */
-    "outDir": "./build",
-    "tsBuildInfoFile": "./build/tsconfig.tsbuildinfo",
+    "outDir": ".",
+    "removeComments": true,
+    "inlineSourceMap": true,
+
+    /* Projects */
+    "incremental": true,
+    "composite": true,
+
+    /* Interop Constraints */
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    
+    /* Type checking */
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+
+    /* Completeness */
+    "skipDefaultLibCheck": true,
+    "skipLibCheck": true
   },
-  "include": ["./src/**/*"],
   "references": [
-    { "path": "./public/tsconfig.json" }
-  ],
+    { "path": "./public" },
+    { "path": "./server" }
+  ]
 }

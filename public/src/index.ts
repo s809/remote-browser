@@ -1,12 +1,14 @@
-import { RemoteBrowserEventType, RemoteBrowserEvents, ServerConnection } from "./ServerConnection.js";
+import { ServerConnection } from "./ServerConnection.js";
+import { RemoteBrowserEventType, RemoteBrowserEvents } from "../../common/index.js";
 import { AppContext } from "./AppContext.js";
 import { config } from "./config.js";
+import { RemotePage } from "./RemotePage.js";
 
 type RemoteBrowserEventHandlerMap = {
     [K in keyof RemoteBrowserEvents]: [K, RemoteBrowserEvents[K]];
 }[keyof RemoteBrowserEvents][];
 
-new class Main {
+new (class Main {
     static instance: Main;
 
     connection: ServerConnection | null = null;
@@ -14,18 +16,18 @@ new class Main {
     lastNavigateUrl: string | null = null;
 
     eventMap: RemoteBrowserEventHandlerMap = [
-        [RemoteBrowserEventType.PageCreated, this.onPageCreated],
+        [RemoteBrowserEventType.NewDocument, this.onNewDocument],
         [RemoteBrowserEventType.CreateElement, this.onCreateElement],
         [RemoteBrowserEventType.CreateTextNode, this.onCreateTextNode],
     ];
 
     resizeObserver = new ResizeObserver(entries => {
         const { width, height } = entries[0]?.contentRect!;
-        this.connection?.updateClientDimensions(width, height);
+        this.remotePage!.updateClientDimensions(width, height);
     });
 
-    idSymbol = Symbol("remoteBrowser_id");
     elements = new Map<number, Node>();
+    remotePage?: RemotePage;
 
     constructor() {
         Main.instance = this;
@@ -67,13 +69,14 @@ new class Main {
             this.addressBarEl.disabled = false;
         }
 
-        this.connection.navigate(this.addressBarEl.value);
+        this.remotePage!.navigate(this.addressBarEl.value);
     }
 
     showFatalError(message: string) {
         this.connection = null;
         this.lastNavigateUrl = null;
         this.resizeObserver.unobserve(AppContext.ContentFrame.element);
+        this.remotePage = undefined;
 
         alert(message);
         AppContext.AddressBar.progress = 100;
@@ -81,28 +84,38 @@ new class Main {
     }
 
     async setupEvents() {
-        this.connection?.addEventListener("close", ({ reason }) => this.showFatalError(reason.length ? reason : "Disconnected!"));
+        this.connection!.addEventListener("close", ({ reason }) => this.showFatalError(reason.length ? reason : "Disconnected!"));
 
         for (const item of this.eventMap)
-            this.connection?.eventReceiver.addEventListener(item[0], (ev: Event) => (item[1] as any).apply(this, (ev as CustomEvent).detail));
+            this.connection!.eventReceiver.addEventListener(item[0], (ev: Event) => (item[1] as any).apply(this, (ev as CustomEvent).detail));
+    
+        this.remotePage = new RemotePage(this.connection!, AppContext.ContentFrame.element.contentWindow as any);
     }
 
-    onPageCreated() {
-        AppContext.displaying = true;
+    onNewDocument() {
+        if (!AppContext.displaying) {
+            AppContext.displaying = true;
 
-        const contentFrameSize = AppContext.ContentFrame.dimensions;
-        this.connection?.updateClientDimensions(contentFrameSize.width, contentFrameSize.height);
+            const contentFrameSize = AppContext.ContentFrame.dimensions;
+            this.remotePage!.updateClientDimensions(contentFrameSize.width, contentFrameSize.height);
         
-        this.resizeObserver.observe(AppContext.ContentFrame.element);
+            this.resizeObserver.observe(AppContext.ContentFrame.element);
+        }
+
+        AppContext.ContentFrame.clear();
     }
 
-    onCreateElement(parentId: number, leftSiblingId: number, id: number, type: string, attributes: Record<string, string>) {
+    onCreateElement(parentId: number | null, leftSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) {
         const frameDocument = AppContext.ContentFrame.element.contentWindow!.document;
 
         let element: HTMLElement;
         switch (type) {
             case "HTML":
                 element = frameDocument.documentElement;
+                element.addEventListener("click", e => {
+                    e.preventDefault();
+                    this.remotePage!.clickElement(e);
+                });
                 break;
             case "HEAD":
                 element = frameDocument.head;
@@ -112,28 +125,31 @@ new class Main {
                 break;
             default:
                 element = this.elements.get(id) as HTMLElement ?? frameDocument.createElement(type);
-
-                while (element.attributes.length)
-                    element.removeAttribute(element.attributes[0]!.name);
-                for (const [key, value] of Object.entries(attributes))
-                    element.setAttribute(key, value);
-                
-                const next = this.elements.get(leftSiblingId)?.nextSibling ?? this.elements.get(parentId)!.lastChild;
-                this.elements.get(parentId)!.insertBefore(element, next ?? null);
+                this.insertNode(parentId!, leftSiblingId, element);
         }
 
+        while (element.attributes.length)
+            element.removeAttribute(element.attributes[0]!.name);
+        for (const [key, value] of Object.entries(attributes))
+            element.setAttribute(key, value);
+
         this.elements.set(id, element);
-        (element as any)[this.idSymbol] = id;
+        element[idSymbol] = id;
     }
 
-    onCreateTextNode(parentId: number, leftSiblingId: number, id: number, value: string) {
+    onCreateTextNode(parentId: number, leftSiblingId: number | null, id: number, value: string) {
         const frameDocument = AppContext.ContentFrame.element.contentWindow!.document;
         const node = this.elements.get(id) ?? frameDocument.createTextNode(value) as unknown as HTMLElement;
 
-        const next = this.elements.get(leftSiblingId)?.nextSibling ?? this.elements.get(parentId)!.lastChild;
-        this.elements.get(parentId)!.insertBefore(node, next ?? null);
+        this.insertNode(parentId, leftSiblingId!, node);
         
         this.elements.set(id, node);
-        (node as any)[this.idSymbol] = id;
+        node[idSymbol] = id;
     }
-};
+
+    private insertNode(parentId: number, leftSiblingId: number | null, node: Node) {
+        const parent = this.elements.get(parentId)!;
+        const next = (typeof leftSiblingId === "number" && this.elements.get(leftSiblingId)?.nextSibling) || parent.lastChild;
+        parent.insertBefore(node, next ?? null);
+    }
+});
