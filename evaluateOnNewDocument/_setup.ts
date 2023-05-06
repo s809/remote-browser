@@ -1,6 +1,8 @@
 import { ExposedFunctions } from "./index.js";
 
 declare global {
+    const _remoteBrowser_inMainFrame: boolean;
+
     const _remoteBrowser_idSymbol: unique symbol;
     interface Node {
         [_remoteBrowser_idSymbol]?: number;
@@ -18,7 +20,16 @@ declare global {
     const _remoteBrowser_onNavigated: ExposedFunctions["_remoteBrowser_onNavigated"];
 }
 
+var inMainFrame;
+try {
+    inMainFrame = window.self === window.top;
+    console.log("Is main frame:", inMainFrame);
+} catch (e) {
+    inMainFrame = false;
+}
+
 Object.assign(window, {
+    _remoteBrowser_inMainFrame: inMainFrame,
     _remoteBrowser_idSymbol: Symbol("_remoteBrowser_idSymbol"),
     _remoteBrowser_nodes: new Map()
 });

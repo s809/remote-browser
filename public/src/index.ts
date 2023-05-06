@@ -68,8 +68,9 @@ new (class Main {
         } finally {
             this.addressBarEl.disabled = false;
         }
-
+        
         this.remotePage!.navigate(this.addressBarEl.value);
+        this.lastNavigateUrl = null;
     }
 
     showFatalError(message: string) {
@@ -103,6 +104,7 @@ new (class Main {
         }
 
         AppContext.ContentFrame.clear();
+        this.elements.clear();
     }
 
     onCreateElement(parentId: number | null, leftSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) {

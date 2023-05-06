@@ -59,8 +59,10 @@ const mutationObserver = new MutationObserver(mutations => {
     }
 });
 
-mutationObserver.observe(document, {
-    attributes: true,
-    childList: true,
-    subtree: true
-});
+if (_remoteBrowser_inMainFrame) {
+    mutationObserver.observe(document, {
+        attributes: true,
+        childList: true,
+        subtree: true
+    });
+}
