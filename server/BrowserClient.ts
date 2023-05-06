@@ -5,6 +5,7 @@ import { RemoteBrowserEventType, RemoteBrowserEvents } from "../common";
 import { exposeFunctions } from "../evaluateOnNewDocument";
 import { readdirSync, readFileSync } from "fs";
 import { posix as path } from "path";
+import { parseSrcset, stringifySrcset } from "srcset";
 
 const JoiCustom = Joi.defaults(schema => schema.required());
 const urlRegex = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
@@ -12,6 +13,10 @@ const urlRegex = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9(
 export class BrowserClient {
     private destroyed = false;
     private pagePrepared = false;
+    static readonly responseCache = new Map<string, {
+        type: string,
+        buffer: Promise<Buffer>
+    }>();
 
     private static browser?: Browser;
     private static clients = new Set<BrowserClient>();
@@ -85,6 +90,31 @@ export class BrowserClient {
         ws.on("message", data => this.handleEvent(data.toString()));
         for (const message of messages)
             ws.emit("message", message);
+        
+        this.page.on("response", async response => {
+            if (response.request().isNavigationRequest()) return;
+            const contentType = response.headers()["content-type"];
+            if (contentType !== "text/css" && !contentType?.startsWith("image/")) return;
+
+            BrowserClient.responseCache.set(response.url(), {
+                type: contentType,
+                buffer: contentType === "text/css"
+                    ? response.buffer().then(buffer => Buffer.from(
+                        buffer.toString().replaceAll(/url\((.*?)\)/g, (_match, p1) => `url(${this.getAssetUrl(p1)})`)
+                    )).catch(() => {
+                        BrowserClient.responseCache.delete(response.url());
+                        return Buffer.from("");
+                    })
+                    : response.buffer()
+            });
+            
+            const cachedReq = BrowserClient.responseCache.get(response.url())!;
+            console.log(`${response.url()}:`,
+                cachedReq.type,
+                cachedReq.type === "text/css"
+                    ? await cachedReq.buffer
+                    : "<redacted>");
+        });
     }
 
     private ping() {
@@ -147,11 +177,38 @@ export class BrowserClient {
         if (!this.pagePrepared) {
             this.pagePrepared = true;
 
+            const convertUrls = (key: string, value: string) => {
+                if (!value.length) return value;
+
+                switch (key) {
+                    case "href":
+                    case "src":
+                        return this.getAssetUrl(value);
+                    case "srcset":
+                        return stringifySrcset(parseSrcset(value).map(item => ({
+                             ...item, 
+                            url: this.getAssetUrl(item.url)
+                        })));
+                    default:
+                        return value;
+                }
+            }
+
             await exposeFunctions(this.page, {
                 _remoteBrowser_log: (...args: any) => console.log("Remote browser:", ...args),
-                _remoteBrowser_createElement: (parentId, leftSiblingId, id, type, attributes) => this.sendEvent(RemoteBrowserEventType.CreateElement, parentId, leftSiblingId, id, type, attributes),
+                _remoteBrowser_createElement: (parentId, leftSiblingId, id, type, attributes) => {
+                    for (const [key, value] of Object.entries(attributes))
+                        attributes[key] = convertUrls(key, value);
+                    
+                    this.sendEvent(RemoteBrowserEventType.CreateElement, parentId, leftSiblingId, id, type, attributes);
+                },
                 _remoteBrowser_createTextNode: (parentId, leftSiblingId, id, value) => this.sendEvent(RemoteBrowserEventType.CreateTextNode, parentId, leftSiblingId, id, value),
-                _remoteBrowser_updateElement: (id, attrKey, value) => this.sendEvent(RemoteBrowserEventType.UpdateElement, id, attrKey, value),
+                _remoteBrowser_updateElement: (id, attrKey, value) => {
+                    if (value)
+                        value = convertUrls(attrKey, value);
+
+                    this.sendEvent(RemoteBrowserEventType.UpdateElement, id, attrKey, value);
+                },
                 _remoteBrowser_removeElement: id => this.sendEvent(RemoteBrowserEventType.RemoveElement, id),
                 _remoteBrowser_close: message => this.destroy(message),
                 _remoteBrowser_addEventListener: name => this.sendEvent(RemoteBrowserEventType.AddEventListener, name),
@@ -179,5 +236,9 @@ export class BrowserClient {
 
     createProxiedFunction(name: string) {
         return (...args: any[]) => this.page.evaluate(`${name}(${args.join(", ")})`);
+    }
+
+    getAssetUrl(url: string) {
+        return `/page-assets/${encodeURIComponent(new URL(url, this.page.url()).toString())}`;
     }
 }

@@ -13,6 +13,16 @@ app.ws("/ws", async ws => {
     await BrowserClient.create(ws);
 });
 
+app.get("/page-assets/:url", async (req, res) => {
+    const url = decodeURIComponent(req.params.url);
+    const item = BrowserClient.responseCache.get(url);
+    if (!item)
+        return res.sendStatus(404);
+    
+    res.contentType(item.type);
+    res.send(await item.buffer);
+});
+
 app.listen(port, () => {
     console.log("Server is started at port", port);
 });

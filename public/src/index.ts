@@ -10,24 +10,25 @@ type RemoteBrowserEventHandlerMap = {
 
 new (class Main {
     static instance: Main;
+    readonly searchParams = new URLSearchParams(location.search);
 
     connection: ServerConnection | null = null;
-    addressBarEl = AppContext.AddressBar.element;
+    readonly addressBarEl = AppContext.AddressBar.element;
     lastNavigateUrl: string | null = null;
 
-    eventMap: RemoteBrowserEventHandlerMap = [
+    readonly eventMap: RemoteBrowserEventHandlerMap = [
         [RemoteBrowserEventType.UrlChanged, this.onUrlChanged],
         [RemoteBrowserEventType.NewDocument, this.onNewDocument],
         [RemoteBrowserEventType.CreateElement, this.onCreateElement],
         [RemoteBrowserEventType.CreateTextNode, this.onCreateTextNode],
     ];
 
-    resizeObserver = new ResizeObserver(entries => {
+    readonly resizeObserver = new ResizeObserver(entries => {
         const { width, height } = entries[0]?.contentRect!;
         this.remotePage!.updateClientDimensions(width, height);
     });
 
-    elements = new Map<number, Node>();
+    readonly elements = new Map<number, Node>();
     remotePage?: RemotePage;
 
     constructor() {
@@ -121,7 +122,10 @@ new (class Main {
                 element = frameDocument.documentElement;
                 element.addEventListener("click", e => {
                     e.preventDefault();
+                    e.stopPropagation();
                     this.remotePage!.clickElement(e);
+                }, {
+                    capture: true
                 });
                 break;
             case "HEAD":
@@ -129,11 +133,13 @@ new (class Main {
                 break;
             case "BODY":
                 element = frameDocument.body;
-                element.appendChild(frameDocument.createElement("style")).textContent = `
-                    * {
-                        all: revert !important;
-                    }
-                `;
+                if (this.searchParams.has("nocss")) {
+                    element.appendChild(frameDocument.createElement("style")).textContent = `
+                        * {
+                            all: revert !important;
+                        }
+                    `;
+                }
                 break;
             default:
                 element = this.elements.get(id) as HTMLElement ?? frameDocument.createElement(type);

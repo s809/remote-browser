@@ -8,6 +8,7 @@ window._remoteBrowser_clickElement = (id: number, relX: number, relY: number) =>
 
     element.dispatchEvent(new MouseEvent("click", {
         clientX: element.offsetLeft + relX,
-        clientY: element.offsetTop + relY
+        clientY: element.offsetTop + relY,
+        bubbles: true
     }));
 }

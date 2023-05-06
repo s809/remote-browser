@@ -60,11 +60,17 @@ const mutationObserver = new MutationObserver(mutations => {
 
         switch (mutation.type) {
             case "childList":
-                addNodes:
                 for (const node of mutation.addedNodes) {
-                    if (targetId === undefined && !(node instanceof HTMLHtmlElement)) continue;
-                    const prevSiblingId = mutation.previousSibling?.[_remoteBrowser_idSymbol] ?? null;
-
+                    if (node instanceof HTMLHtmlElement) {
+                        createUnknownNode(null, null, node);
+                        continue;
+                    }
+                    
+                    const prevSiblingId = [...mutation.target.childNodes]
+                        .filter(n => n[_remoteBrowser_idSymbol] || n === node)
+                        .find((_n, i, list) => list[i + 1] === node)
+                        ?.[_remoteBrowser_idSymbol]
+                        ?? null;
                     createUnknownNode(targetId, prevSiblingId, node);
                 }
 
