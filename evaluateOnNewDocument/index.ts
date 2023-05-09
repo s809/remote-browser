@@ -3,8 +3,8 @@ import { Page } from "puppeteer";
 export interface ExposedFunctions {
     _remoteBrowser_log(...args: any[]): void;
     _remoteBrowser_close(message: string): void;
-    _remoteBrowser_createElement(parentId: number | null, leftSiblingId: number | null, id: number, type: string, attributes: Record<string, string>): void;
-    _remoteBrowser_createTextNode(parentId: number, leftSiblingId: number | null, id: number, value: string): void;
+    _remoteBrowser_createElement(parentId: number | null, nextSiblingId: number | null, id: number, type: string, attributes: Record<string, string>): void;
+    _remoteBrowser_createTextNode(parentId: number, nextSiblingId: number | null, id: number, value: string): void;
     _remoteBrowser_updateElement(id: number, attrKey: string, value: string | null): void;
     _remoteBrowser_removeElement(id: number): void;
     _remoteBrowser_addEventListener(name: string): void;

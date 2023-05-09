@@ -1,4 +1,4 @@
-import { RemoteBrowserEvents, RemoteBrowserEventType } from "../../common/index.js";
+import { RemoteBrowserEvents } from "../../common/index.js";
 
 interface ServerConnectionEventMap {
     "close": CloseEvent;
@@ -8,6 +8,9 @@ interface ServerConnectionEventMap {
 export class ServerConnection extends EventTarget {
     readonly eventReceiver = new EventTarget();
     private ws: WebSocket;
+
+    private paused = false;
+    private queue: string[] = [];
 
     static async create(url: string | URL): Promise<ServerConnection> {
         const ws = new WebSocket(url);
@@ -23,11 +26,18 @@ export class ServerConnection extends EventTarget {
 
         ws.addEventListener("close", event => this.dispatchEvent(new (event.constructor as typeof Event)(event.type, event)));
         ws.addEventListener("message", e => {
-            const { type, data } = JSON.parse(e.data);
-            this.eventReceiver.dispatchEvent(new CustomEvent(type, {
-                detail: data
-            }));
+            if (this.paused || this.queue.length)
+                this.queue.push(e.data);
+            else
+                this.evaluateMessage(e.data);
         });
+    }
+
+    evaluateMessage(message: string) {
+        const { type, data } = JSON.parse(message);
+        this.eventReceiver.dispatchEvent(new CustomEvent(type, {
+            detail: data
+        }));
     }
 
     override addEventListener<K extends keyof ServerConnectionEventMap>(type: K, listener: (this: ServerConnection, ev: ServerConnectionEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
@@ -40,5 +50,19 @@ export class ServerConnection extends EventTarget {
             type,
             data
         }));
+    }
+
+    pause() {
+        this.paused = true;
+    }
+
+    resume() {
+        this.paused = false;
+
+        let message;
+        while (message = this.queue.shift()) {
+            this.evaluateMessage(message);
+            if (this.paused) return;
+        }
     }
 }

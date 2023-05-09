@@ -4,10 +4,6 @@ import { AppContext } from "./AppContext.js";
 import { config } from "./config.js";
 import { RemotePage } from "./RemotePage.js";
 
-type RemoteBrowserEventHandlerMap = {
-    [K in keyof RemoteBrowserEvents]: [K, RemoteBrowserEvents[K]];
-}[keyof RemoteBrowserEvents][];
-
 new (class Main {
     static instance: Main;
     readonly searchParams = new URLSearchParams(location.search);
@@ -16,12 +12,14 @@ new (class Main {
     readonly addressBarEl = AppContext.AddressBar.element;
     lastNavigateUrl: string | null = null;
 
-    readonly eventMap: RemoteBrowserEventHandlerMap = [
-        [RemoteBrowserEventType.UrlChanged, this.onUrlChanged],
-        [RemoteBrowserEventType.NewDocument, this.onNewDocument],
-        [RemoteBrowserEventType.CreateElement, this.onCreateElement],
-        [RemoteBrowserEventType.CreateTextNode, this.onCreateTextNode],
-    ];
+    readonly eventMap: Partial<RemoteBrowserEvents> = {
+        [RemoteBrowserEventType.UrlChanged]: this.onUrlChanged,
+        [RemoteBrowserEventType.NewDocument]: this.onNewDocument,
+        [RemoteBrowserEventType.CreateElement]: this.onCreateElement,
+        [RemoteBrowserEventType.CreateTextNode]: this.onCreateTextNode,
+        [RemoteBrowserEventType.UpdateElement]: this.onUpdateElement,
+        [RemoteBrowserEventType.RemoveElement]: this.onRemoveElement,
+    };
 
     readonly resizeObserver = new ResizeObserver(entries => {
         const { width, height } = entries[0]?.contentRect!;
@@ -30,6 +28,13 @@ new (class Main {
 
     readonly elements = new Map<number, Node>();
     remotePage?: RemotePage;
+
+    get frameWindow() {
+        return AppContext.ContentFrame.element.contentWindow as typeof window;
+    }
+    get frameDocument() {
+        return this.frameWindow.document;
+    }
 
     constructor() {
         Main.instance = this;
@@ -88,10 +93,11 @@ new (class Main {
     async setupEvents() {
         this.connection!.addEventListener("close", ({ reason }) => this.showFatalError(reason.length ? reason : "Disconnected!"));
 
-        for (const item of this.eventMap)
+        for (const item of Object.entries(this.eventMap))
             this.connection!.eventReceiver.addEventListener(item[0], (ev: Event) => (item[1] as any).apply(this, (ev as CustomEvent).detail));
     
-        this.remotePage = new RemotePage(this.connection!, AppContext.ContentFrame.element.contentWindow as any);
+        this.remotePage = new RemotePage(this.connection!, this.frameWindow);
+        AppContext.ContentFrame.element.addEventListener("load", () => this.connection?.resume());
     }
 
     onUrlChanged(url: string) {
@@ -109,17 +115,16 @@ new (class Main {
             this.resizeObserver.observe(AppContext.ContentFrame.element);
         }
 
+        this.connection?.pause();
         AppContext.ContentFrame.clear();
         this.elements.clear();
     }
 
-    onCreateElement(parentId: number | null, leftSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) {
-        const frameDocument = AppContext.ContentFrame.element.contentWindow!.document;
-
+    onCreateElement(parentId: number | null, nextSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) {
         let element: HTMLElement;
         switch (type) {
             case "HTML":
-                element = frameDocument.documentElement;
+                element = this.frameDocument.documentElement;
                 element.addEventListener("click", e => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -129,12 +134,12 @@ new (class Main {
                 });
                 break;
             case "HEAD":
-                element = frameDocument.head;
+                element = this.frameDocument.head;
                 break;
             case "BODY":
-                element = frameDocument.body;
+                element = this.frameDocument.body;
                 if (this.searchParams.has("nocss")) {
-                    element.appendChild(frameDocument.createElement("style")).textContent = `
+                    element.appendChild(this.frameDocument.createElement("style")).textContent = `
                         * {
                             all: revert !important;
                         }
@@ -142,32 +147,54 @@ new (class Main {
                 }
                 break;
             default:
-                element = this.elements.get(id) as HTMLElement ?? frameDocument.createElement(type);
-                this.insertNode(parentId!, leftSiblingId, element);
+                element = this.elements.get(id) as HTMLElement ?? this.frameDocument.createElement(type);
+                this.insertNode(parentId!, nextSiblingId, element);
         }
 
         while (element.attributes.length)
             element.removeAttribute(element.attributes[0]!.name);
         for (const [key, value] of Object.entries(attributes))
             element.setAttribute(key, value);
+        element.setAttribute("data-rb-id", id.toString());
+        element.setAttribute("data-rb-parent-id", parentId?.toString() ?? "null");
+        element.setAttribute("data-rb-next-id", nextSiblingId?.toString() ?? "null");
 
         this.elements.set(id, element);
         element[idSymbol] = id;
     }
 
-    onCreateTextNode(parentId: number, leftSiblingId: number | null, id: number, value: string) {
+    onCreateTextNode(parentId: number, nextSiblingId: number | null, id: number, value: string) {
         const frameDocument = AppContext.ContentFrame.element.contentWindow!.document;
         const node = this.elements.get(id) ?? frameDocument.createTextNode(value) as unknown as HTMLElement;
 
-        this.insertNode(parentId, leftSiblingId!, node);
+        this.insertNode(parentId, nextSiblingId!, node);
         
         this.elements.set(id, node);
         node[idSymbol] = id;
     }
 
-    private insertNode(parentId: number, leftSiblingId: number | null, node: Node) {
+    private insertNode(parentId: number, nextSiblingId: number | null, node: Node) {
         const parent = this.elements.get(parentId)!;
-        const next = (typeof leftSiblingId === "number" && this.elements.get(leftSiblingId)?.nextSibling) || parent.lastChild;
+        const next = this.elements.get(nextSiblingId!);
         parent.insertBefore(node, next ?? null);
+    }
+
+    onUpdateElement(id: number, attrKey: string, value: string | null) {
+        const element = this.elements.get(id);
+        if (!(element instanceof this.frameWindow.HTMLElement)) return;
+
+        if (value)
+            element.setAttribute(attrKey, value);
+        else
+            element.removeAttribute(attrKey);
+    }
+
+    onRemoveElement(id: number) {
+        const node = this.elements.get(id);
+        if (node) {
+            this.elements.delete(id);
+            node.parentNode?.removeChild(node);
+            delete node[idSymbol];
+        }
     }
 });

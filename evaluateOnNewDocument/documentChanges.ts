@@ -6,39 +6,32 @@ function setNodeId(node: Node) {
     return nextId++;
 }
 
-function createElement(parentId: number | null, prevSiblingId: number | null, element: HTMLElement) {
+function createElement(parentId: number | null, nextSiblingId: number | null, element: HTMLElement) {
     if (element instanceof HTMLScriptElement)
-        return null;
+        return;
     
     const id = setNodeId(element);
-    _remoteBrowser_createElement(parentId, prevSiblingId, id, element.tagName, Object.fromEntries([...element.attributes].filter(x => !x.name.startsWith("on")).map(x => [x.name, x.nodeValue ?? ""])));
+    _remoteBrowser_createElement(parentId, nextSiblingId, id, element.tagName, Object.fromEntries([...element.attributes].filter(x => !x.name.startsWith("on")).map(x => [x.name, x.nodeValue ?? ""])));
 
-    let lastChildId: number | null = null;
     for (const child of element.childNodes)
-        lastChildId = createUnknownNode(id, lastChildId, child);
-
-    return id;
+        createUnknownNode(id, null, child);
 }
 
-function createTextNode(parentId: number | null, prevSiblingId: number | null, node: Node) {
+function createTextNode(parentId: number | null, nextSiblingId: number | null, node: Node) {
     if (parentId === null)
-        return null;
+        return;
     
-    const id = setNodeId(node);
-    _remoteBrowser_createTextNode(parentId, prevSiblingId, id, node.nodeValue!);
-    return id;
+    _remoteBrowser_createTextNode(parentId, nextSiblingId, setNodeId(node), node.nodeValue!);
 }
 
-function createUnknownNode(parentId: number | null, prevSiblingId: number | null, node: Node) {
-    if (_remoteBrowser_idSymbol in node) return null;
+function createUnknownNode(parentId: number | null, nextSiblingId: number | null, node: Node) {
+    if (_remoteBrowser_idSymbol in node) return;
 
     switch (node.nodeType) {
         case Node.ELEMENT_NODE:
-            return createElement(parentId, prevSiblingId, node as HTMLElement);
+            return createElement(parentId, nextSiblingId, node as HTMLElement);
         case Node.TEXT_NODE:
-            return createTextNode(parentId, prevSiblingId, node);
-        default:
-            return null;
+            return createTextNode(parentId, nextSiblingId, node);
     }
 }
 
@@ -66,12 +59,10 @@ const mutationObserver = new MutationObserver(mutations => {
                         continue;
                     }
                     
-                    const prevSiblingId = [...mutation.target.childNodes]
-                        .filter(n => n[_remoteBrowser_idSymbol] || n === node)
-                        .find((_n, i, list) => list[i + 1] === node)
-                        ?.[_remoteBrowser_idSymbol]
-                        ?? null;
-                    createUnknownNode(targetId, prevSiblingId, node);
+                    const nodes = [...mutation.target.childNodes].filter(n => n[_remoteBrowser_idSymbol] || n === node);
+                    const nextSibling = nodes.slice(nodes.indexOf(node as ChildNode))[1];
+
+                    createUnknownNode(targetId, nextSibling?.[_remoteBrowser_idSymbol] ?? null, node);
                 }
 
                 for (const node of mutation.removedNodes) {

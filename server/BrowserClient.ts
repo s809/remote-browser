@@ -6,20 +6,21 @@ import { exposeFunctions } from "../evaluateOnNewDocument";
 import { readdirSync, readFileSync } from "fs";
 import { posix as path } from "path";
 import { parseSrcset, stringifySrcset } from "srcset";
+import { PageAssetManager } from "./PageAssetManager";
 
 const JoiCustom = Joi.defaults(schema => schema.required());
 const urlRegex = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
 
 export class BrowserClient {
+    static readonly clients = new Map<number, BrowserClient>();
+    private static lastId = 0;
+    private readonly id = BrowserClient.lastId++;
+
     private destroyed = false;
     private pagePrepared = false;
-    static readonly responseCache = new Map<string, {
-        type: string,
-        buffer: Promise<Buffer>
-    }>();
 
     private static browser?: Browser;
-    private static clients = new Set<BrowserClient>();
+    pageAssetManager!: PageAssetManager;
 
     private static evaluateOnNewDocumentFiles: string[] = [];
 
@@ -71,18 +72,37 @@ export class BrowserClient {
         ws.on("message", preReceiveMessages);
         // ASYNC STARTS HERE
 
-        if (!BrowserClient.browser)
-            BrowserClient.browser = await puppeteer.launch({ headless: false, devtools: true });
+        let newBrowser = false;
+        if (!BrowserClient.browser) {
+            BrowserClient.browser = await puppeteer.launch({
+                args: [
+                    "--disable-web-security",
+                    "--disable-features=IsolateOrigins",
+                    "--disable-site-isolation-trials",
+                    "--disable-features=BlockInsecurePrivateNetworkRequests"
+                ],
+                headless: false,
+                devtools: true
+            });
+            newBrowser = true;
+        }
         
         const page = await BrowserClient.browser.newPage();
-
+        page.setDefaultTimeout(0);
+        
+        if (newBrowser) {
+            const pages = await BrowserClient.browser.pages();
+            if (pages.length > 1)
+                await pages[0]!.close();
+        }
+        
         // ASYNC ENDS HERE
         ws.off("message", preReceiveMessages);
         return new BrowserClient(ws, page, messages);
     }
 
     private constructor(private ws: WebSocket, private page: Page, messages: RawData[]) {
-        BrowserClient.clients.add(this);
+        BrowserClient.clients.set(this.id, this);
 
         page.on("close", () => this.destroy());
         ws.on("close", () => this.destroy());
@@ -90,31 +110,6 @@ export class BrowserClient {
         ws.on("message", data => this.handleEvent(data.toString()));
         for (const message of messages)
             ws.emit("message", message);
-        
-        this.page.on("response", async response => {
-            if (response.request().isNavigationRequest()) return;
-            const contentType = response.headers()["content-type"];
-            if (contentType !== "text/css" && !contentType?.startsWith("image/")) return;
-
-            BrowserClient.responseCache.set(response.url(), {
-                type: contentType,
-                buffer: contentType === "text/css"
-                    ? response.buffer().then(buffer => Buffer.from(
-                        buffer.toString().replaceAll(/url\((.*?)\)/g, (_match, p1) => `url(${this.getAssetUrl(p1)})`)
-                    )).catch(() => {
-                        BrowserClient.responseCache.delete(response.url());
-                        return Buffer.from("");
-                    })
-                    : response.buffer()
-            });
-            
-            const cachedReq = BrowserClient.responseCache.get(response.url())!;
-            console.log(`${response.url()}:`,
-                cachedReq.type,
-                cachedReq.type === "text/css"
-                    ? await cachedReq.buffer
-                    : "<redacted>");
-        });
     }
 
     private ping() {
@@ -161,7 +156,7 @@ export class BrowserClient {
         else
             this.ws.close();
         this.page?.close().catch(() => { });
-        BrowserClient.clients.delete(this);
+        BrowserClient.clients.delete(this.id);
 
         if (!BrowserClient.clients.size) {
             const browser = BrowserClient.browser;
@@ -183,12 +178,15 @@ export class BrowserClient {
                 switch (key) {
                     case "href":
                     case "src":
-                        return this.getAssetUrl(value);
+                        return this.pageAssetManager.getAssetRoute(value);
                     case "srcset":
                         return stringifySrcset(parseSrcset(value).map(item => ({
                              ...item, 
-                            url: this.getAssetUrl(item.url)
+                            url: this.pageAssetManager.getAssetRoute(item.url)
                         })));
+                    case "style":
+                    case "_textNode":
+                        return this.pageAssetManager.replaceCssLinks(value);
                     default:
                         return value;
                 }
@@ -196,18 +194,23 @@ export class BrowserClient {
 
             await exposeFunctions(this.page, {
                 _remoteBrowser_log: (...args: any) => console.log("Remote browser:", ...args),
-                _remoteBrowser_createElement: (parentId, leftSiblingId, id, type, attributes) => {
-                    for (const [key, value] of Object.entries(attributes))
-                        attributes[key] = convertUrls(key, value);
+                _remoteBrowser_createElement: (parentId, nextSiblingId, id, type, attributes) => {
+                    for (const [key, value] of Object.entries(attributes)) {
+                        if (key.startsWith("on"))
+                            delete attributes[key];
+                        else
+                            attributes[key] = convertUrls(key, value);
+                    }
                     
-                    this.sendEvent(RemoteBrowserEventType.CreateElement, parentId, leftSiblingId, id, type, attributes);
+                    this.sendEvent(RemoteBrowserEventType.CreateElement, parentId, nextSiblingId, id, type, attributes);
                 },
-                _remoteBrowser_createTextNode: (parentId, leftSiblingId, id, value) => this.sendEvent(RemoteBrowserEventType.CreateTextNode, parentId, leftSiblingId, id, value),
+                _remoteBrowser_createTextNode: (parentId, nextSiblingId, id, value) => this.sendEvent(RemoteBrowserEventType.CreateTextNode, parentId, nextSiblingId, id, convertUrls("_textNode", value)),
                 _remoteBrowser_updateElement: (id, attrKey, value) => {
                     if (value)
                         value = convertUrls(attrKey, value);
 
-                    this.sendEvent(RemoteBrowserEventType.UpdateElement, id, attrKey, value);
+                    if (!attrKey.startsWith("on"))
+                        this.sendEvent(RemoteBrowserEventType.UpdateElement, id, attrKey, value);
                 },
                 _remoteBrowser_removeElement: id => this.sendEvent(RemoteBrowserEventType.RemoveElement, id),
                 _remoteBrowser_close: message => this.destroy(message),
@@ -232,13 +235,10 @@ export class BrowserClient {
     onNavigated() {
         this.sendEvent(RemoteBrowserEventType.UrlChanged, this.page.mainFrame().url());
         this.sendEvent(RemoteBrowserEventType.NewDocument);
+        this.pageAssetManager = new PageAssetManager(this.id, this.page.url(), this.createProxiedFunction("_remoteBrowser_fetch") as any);
     }
 
     createProxiedFunction(name: string) {
-        return (...args: any[]) => this.page.evaluate(`${name}(${args.join(", ")})`);
-    }
-
-    getAssetUrl(url: string) {
-        return `/page-assets/${encodeURIComponent(new URL(url, this.page.url()).toString())}`;
+        return (...args: any[]) => this.page.evaluate(`${name}(...JSON.parse(decodeURIComponent("${encodeURIComponent(JSON.stringify(args))}")))`);
     }
 }

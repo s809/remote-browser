@@ -16,8 +16,8 @@ export const enum RemoteBrowserEventType {
 export interface RemoteBrowserEvents {
     [RemoteBrowserEventType.NewDocument]: () => void;
     [RemoteBrowserEventType.UrlChanged]: (url: string) => void;
-    [RemoteBrowserEventType.CreateElement]: (parentId: number | null, leftSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) => void;
-    [RemoteBrowserEventType.CreateTextNode]: (parentId: number, leftSiblingId: number | null, id: number, value: string) => void;
+    [RemoteBrowserEventType.CreateElement]: (parentId: number | null, nextSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) => void;
+    [RemoteBrowserEventType.CreateTextNode]: (parentId: number, nextSiblingId: number | null, id: number, value: string) => void;
     [RemoteBrowserEventType.UpdateElement]: (id: number, attrKey: string, value: string | null) => void;
     [RemoteBrowserEventType.RemoveElement]: (id: number) => void;
     [RemoteBrowserEventType.AddEventListener]: (name: string) => void;

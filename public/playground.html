@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head data-head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    .red {
+      color: red;
+    }
+  </style>
+  <script>
+    function unred() {
+      document.querySelector("#test").classList.remove("red");
+    }
+
+    function addTest2() {
+      const el = document.createElement("button");
+      el.textContent = "Remove me";
+      el.onclick = removeTest2;
+      document.querySelector("#add-test2").after(el);
+    }
+
+    function removeTest2(e) {
+      e.target.remove();
+    }
+
+    function changeText(button) {
+      button.textContent = Math.random().toString();
+    }
+  </script>
+</head>
+<body data-body>
+  <h1 id="test" class="red">red</h1>
+  <button onclick="unred()">Unred</button>
+
+  <br>
+  <button id="add-test2" onclick="addTest2()">Add test2</button>
+
+  <br>
+  <button onclick="changeText(this)">Change my text</button>
+</body>
+</html>

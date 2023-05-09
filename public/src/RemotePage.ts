@@ -10,8 +10,6 @@ declare global {
 }
 
 export class RemotePage {
-    
-
     constructor(private connection: ServerConnection, private window: typeof global) { }
 
     navigate(value: string) {
