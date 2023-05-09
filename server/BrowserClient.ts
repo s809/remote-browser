@@ -93,6 +93,7 @@ export class BrowserClient {
         
         const page = await BrowserClient.browser.newPage();
         page.setDefaultTimeout(0);
+        await page.setBypassCSP(true);
         
         if (newBrowser) {
             const pages = await BrowserClient.browser.pages();
