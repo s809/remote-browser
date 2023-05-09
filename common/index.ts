@@ -9,7 +9,7 @@ export const enum RemoteBrowserEventType {
 
     Navigate = "navigate",
     SetClientDimensions = "set_client_dimensions",
-    SetElementScroll = "set_element_scroll",
+    ScrollElement = "scroll_element",
     ClickElement = "click_element"
 }
 
@@ -24,6 +24,6 @@ export interface RemoteBrowserEvents {
 
     [RemoteBrowserEventType.Navigate]: (value: string) => void;
     [RemoteBrowserEventType.SetClientDimensions]: (width: number, height: number) => void;
-    [RemoteBrowserEventType.SetElementScroll]: (id: number, x: number, y: number) => void;
+    [RemoteBrowserEventType.ScrollElement]: (id: number, x: number, y: number) => void;
     [RemoteBrowserEventType.ClickElement]: (id: number, x: number, y: number) => void;
 }

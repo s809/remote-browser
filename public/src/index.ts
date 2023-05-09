@@ -132,6 +132,13 @@ new (class Main {
                 }, {
                     capture: true
                 });
+                element.addEventListener("scroll", e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.remotePage?.updateElementScroll(e.target as HTMLElement);
+                }, {
+                    capture: true
+                });
                 break;
             case "HEAD":
                 element = this.frameDocument.head;

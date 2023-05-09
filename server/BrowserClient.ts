@@ -41,6 +41,10 @@ export class BrowserClient {
         [RemoteBrowserEventType.ClickElement, {
             schema: [JoiCustom.number(), JoiCustom.number(), JoiCustom.number()],
             handler: this.createProxiedFunction("_remoteBrowser_clickElement")
+        }],
+        [RemoteBrowserEventType.ScrollElement, {
+            schema: [JoiCustom.number(), JoiCustom.number(), JoiCustom.number()],
+            handler: this.createProxiedFunction("_remoteBrowser_scrollElement")
         }]
     ].map((pair: any) => {
         pair[1].schema = JoiCustom.array().ordered(...pair[1].schema);
@@ -200,6 +204,13 @@ export class BrowserClient {
                             delete attributes[key];
                         else
                             attributes[key] = convertUrls(key, value);
+                    }
+
+                    if (["IFRAME", "EMBED", "OBJECT"].includes(type)) {
+                        if (attributes["src"])
+                            attributes["src"] = `/notsupported.html#${type.toLowerCase()}`;
+                        if (attributes["data"])
+                            attributes["data"] = `/notsupported.html#${type.toLowerCase()}`;
                     }
                     
                     this.sendEvent(RemoteBrowserEventType.CreateElement, parentId, nextSiblingId, id, type, attributes);

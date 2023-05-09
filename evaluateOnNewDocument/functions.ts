@@ -1,5 +1,6 @@
 declare global {
     function _remoteBrowser_clickElement(id: number, relX: number, relY: number): void;
+    function _remoteBrowser_scrollElement(id: number, x: number, y: number): void;
     function _remoteBrowser_fetch(url: string, uploadUrl: string): Promise<void>;
 }
 
@@ -12,6 +13,13 @@ window._remoteBrowser_clickElement = (id: number, relX: number, relY: number) =>
         clientY: element.offsetTop + relY,
         bubbles: true
     }));
+}
+
+window._remoteBrowser_scrollElement = (id: number, x: number, y: number) => {
+    const element = _remoteBrowser_nodes.get(id);
+    if (!(element instanceof HTMLElement)) return;
+    
+    element.scrollTo(x, y);
 }
 
 window._remoteBrowser_fetch = async (url: string, uploadUrl: string) => {
