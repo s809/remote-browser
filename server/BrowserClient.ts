@@ -199,6 +199,7 @@ export class BrowserClient {
 
             await exposeFunctions(this.page, {
                 _remoteBrowser_log: (...args: any) => console.log("Remote browser:", ...args),
+                _remoteBrowser_createDoctype: (name, publicId, systemId) => this.sendEvent(RemoteBrowserEventType.SetDoctype, name, publicId, systemId),
                 _remoteBrowser_createElement: (parentId, nextSiblingId, id, type, attributes) => {
                     for (const [key, value] of Object.entries(attributes)) {
                         if (key.startsWith("on"))
@@ -227,11 +228,14 @@ export class BrowserClient {
                 _remoteBrowser_removeElement: id => this.sendEvent(RemoteBrowserEventType.RemoveElement, id),
                 _remoteBrowser_close: message => this.destroy(message),
                 _remoteBrowser_addEventListener: name => this.sendEvent(RemoteBrowserEventType.AddEventListener, name),
-                _remoteBrowser_onNavigated: () => this.onNavigated()
+                _remoteBrowser_onNavigated: () => this.onNavigated(),
+                _remoteBrowser_onBeforeUnload: () => this.onPageBeforeUnload()
             });
 
             for (const file of BrowserClient.evaluateOnNewDocumentFiles)
                 await this.page.evaluateOnNewDocument(file);
+
+            this.page.on("load", () => this.onPageLoad());
         }
         
         await this.page.goto(url);
@@ -248,6 +252,14 @@ export class BrowserClient {
         this.sendEvent(RemoteBrowserEventType.UrlChanged, this.page.mainFrame().url());
         this.sendEvent(RemoteBrowserEventType.NewDocument);
         this.pageAssetManager = new PageAssetManager(this.id, this.page.url(), this.createProxiedFunction("_remoteBrowser_fetch") as any);
+    }
+
+    onPageLoad() {
+        this.sendEvent(RemoteBrowserEventType.PageLoad);
+    }
+
+    onPageBeforeUnload() {
+        this.sendEvent(RemoteBrowserEventType.PageBeforeUnload);
     }
 
     createProxiedFunction(name: string) {

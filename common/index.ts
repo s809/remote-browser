@@ -1,6 +1,10 @@
 export const enum RemoteBrowserEventType {
     NewDocument = "new_document",
     UrlChanged = "url_changed",
+    PageLoad = "page_load",
+    PageBeforeUnload = "page_beforeunload",
+
+    SetDoctype = "set_doctype",
     CreateElement = "create_element",
     CreateTextNode = "create_text_node",
     UpdateElement = "update_element",
@@ -16,6 +20,10 @@ export const enum RemoteBrowserEventType {
 export interface RemoteBrowserEvents {
     [RemoteBrowserEventType.NewDocument]: () => void;
     [RemoteBrowserEventType.UrlChanged]: (url: string) => void;
+    [RemoteBrowserEventType.PageLoad]: () => void;
+    [RemoteBrowserEventType.PageBeforeUnload]: () => void;
+
+    [RemoteBrowserEventType.SetDoctype]: (name: string, publicId: string, systemId: string) => void;
     [RemoteBrowserEventType.CreateElement]: (parentId: number | null, nextSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) => void;
     [RemoteBrowserEventType.CreateTextNode]: (parentId: number, nextSiblingId: number | null, id: number, value: string) => void;
     [RemoteBrowserEventType.UpdateElement]: (id: number, attrKey: string, value: string | null) => void;

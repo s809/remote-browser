@@ -1,5 +1,6 @@
 
-const progressValues = [0, 10, 70, 100];
+const progressValues = [0, 10, 70, 100] as const;
+type ProgressValue = typeof progressValues[number];
 
 export const AppContext = new class AppContext {
     #navbar = document.querySelector(".toolbar-navigation") as HTMLDivElement;
@@ -28,7 +29,7 @@ export const AppContext = new class AppContext {
             return this.#element;
         }
         
-        #progress = 0;
+        #progress: ProgressValue = 0;
         #progressClassName?: string;
         get progress() {
             return this.#progress;
@@ -36,8 +37,6 @@ export const AppContext = new class AppContext {
         set progress(value) {
             if (this.#progress === value) return;
 
-            if (!progressValues.includes(value))
-                throw new Error(`Invalid progress value. Allowed: ${progressValues.join(", ")}`);
             if (value < this.#progress)
                 this.#progress = 0;
 

@@ -20,9 +20,12 @@ export class RemotePage {
         this.connection.sendEvent(RemoteBrowserEventType.SetClientDimensions, width, height);
     }
 
-    updateElementScroll(el: HTMLElement) {
-        if (!el[idSymbol]) return;
-        this.connection.sendEvent(RemoteBrowserEventType.ScrollElement, el[idSymbol], el.scrollLeft, el.scrollTop);
+    updateElementScroll(el: HTMLElement | Document) {
+        if (el === this.window.document) 
+            return this.connection.sendEvent(RemoteBrowserEventType.ScrollElement, 0, this.window.scrollX, this.window.scrollY);
+
+        if (!el[idSymbol] || !(el instanceof this.window.HTMLElement)) return;
+        this.connection.sendEvent(RemoteBrowserEventType.ScrollElement, (el as any)[idSymbol], el.scrollLeft, el.scrollTop);
     }
 
     clickElement(e: MouseEvent) {

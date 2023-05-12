@@ -15,6 +15,10 @@ new (class Main {
     readonly eventMap: Partial<RemoteBrowserEvents> = {
         [RemoteBrowserEventType.UrlChanged]: this.onUrlChanged,
         [RemoteBrowserEventType.NewDocument]: this.onNewDocument,
+        [RemoteBrowserEventType.PageLoad]: this.onPageLoad,
+        [RemoteBrowserEventType.PageBeforeUnload]: this.onPageBeforeUnload,
+
+        [RemoteBrowserEventType.SetDoctype]: this.onCreateDoctype,
         [RemoteBrowserEventType.CreateElement]: this.onCreateElement,
         [RemoteBrowserEventType.CreateTextNode]: this.onCreateTextNode,
         [RemoteBrowserEventType.UpdateElement]: this.onUpdateElement,
@@ -118,6 +122,30 @@ new (class Main {
         this.connection?.pause();
         AppContext.ContentFrame.clear();
         this.elements.clear();
+        
+        AppContext.AddressBar.progress = 70;
+    }
+
+    onPageLoad() {
+        AppContext.AddressBar.progress = 100;
+
+        setTimeout(() => {
+            for (const el of this.frameDocument.querySelectorAll("svg")) {
+                const parent = el.parentNode;
+                const next = el.nextSibling;
+                el.remove();
+                parent!.insertBefore(el.cloneNode(true), next);
+            }
+        }, 5000);
+    }
+
+    onPageBeforeUnload() {
+        AppContext.AddressBar.progress = 10;
+    }
+
+    onCreateDoctype(name: string, publicId: string, systemId: string) {
+        const doctype = this.frameDocument.implementation.createDocumentType(name, publicId, systemId);
+        this.frameDocument.insertBefore(doctype, this.frameDocument.documentElement);
     }
 
     onCreateElement(parentId: number | null, nextSiblingId: number | null, id: number, type: string, attributes: Record<string, string>) {
@@ -132,7 +160,7 @@ new (class Main {
                 }, {
                     capture: true
                 });
-                element.addEventListener("scroll", e => {
+                this.frameDocument.addEventListener("scroll", e => {
                     e.preventDefault();
                     e.stopPropagation();
                     this.remotePage?.updateElementScroll(e.target as HTMLElement);
@@ -162,10 +190,7 @@ new (class Main {
             element.removeAttribute(element.attributes[0]!.name);
         for (const [key, value] of Object.entries(attributes))
             element.setAttribute(key, value);
-        element.setAttribute("data-rb-id", id.toString());
-        element.setAttribute("data-rb-parent-id", parentId?.toString() ?? "null");
-        element.setAttribute("data-rb-next-id", nextSiblingId?.toString() ?? "null");
-
+        
         this.elements.set(id, element);
         element[idSymbol] = id;
     }

@@ -6,6 +6,10 @@ function setNodeId(node: Node) {
     return nextId++;
 }
 
+function createDoctypeNode(node: DocumentType) {
+    _remoteBrowser_createDoctype(node.name, node.publicId, node.systemId);
+}
+
 function createElement(parentId: number | null, nextSiblingId: number | null, element: HTMLElement) {
     if (element instanceof HTMLScriptElement)
         return;
@@ -28,6 +32,8 @@ function createUnknownNode(parentId: number | null, nextSiblingId: number | null
     if (_remoteBrowser_idSymbol in node) return;
 
     switch (node.nodeType) {
+        case Node.DOCUMENT_TYPE_NODE:
+            return createDoctypeNode(node as DocumentType)
         case Node.ELEMENT_NODE:
             return createElement(parentId, nextSiblingId, node as HTMLElement);
         case Node.TEXT_NODE:
@@ -53,7 +59,7 @@ const mutationObserver = new MutationObserver(mutations => {
 
         switch (mutation.type) {
             case "childList":
-                for (const node of mutation.addedNodes) {
+                for (const node of mutation.addedNodes) {                    
                     if (node instanceof HTMLHtmlElement) {
                         createUnknownNode(null, null, node);
                         continue;
